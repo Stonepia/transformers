@@ -4234,7 +4234,7 @@ class GenerationMixin(ContinuousMixin):
                 beam_scores = None
 
             if self.config.is_encoder_decoder:
-                output_result =  GenerateBeamEncoderDecoderOutput(
+                output_result = GenerateBeamEncoderDecoderOutput(
                     sequences=sequences,
                     sequences_scores=beam_scores,
                     scores=all_scores,
@@ -4248,7 +4248,7 @@ class GenerationMixin(ContinuousMixin):
                     past_key_values=model_kwargs.get("past_key_values"),
                 )
             else:
-                output_result =  GenerateBeamDecoderOnlyOutput(
+                output_result = GenerateBeamDecoderOnlyOutput(
                     sequences=sequences,
                     sequences_scores=beam_scores,
                     scores=all_scores,
@@ -4259,7 +4259,7 @@ class GenerationMixin(ContinuousMixin):
                     past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
-            output_result =  sequences
+            output_result = sequences
         if self.token_latency is not None:
             return (output_result, latency_list)
         else:

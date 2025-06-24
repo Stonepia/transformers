@@ -27,6 +27,7 @@ from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ..pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
 import time
 
+
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
@@ -107,9 +108,13 @@ class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
             strict(`Optional[bool]`):
                 Flag to instruct `torch.export` to use `torchdynamo`.
         """
-        model_device=self.model.model.device
-        example_input_ids = input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long, device=model_device)
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
+        model_device = self.model.model.device
+        example_input_ids = (
+            input_ids if input_ids is not None else torch.tensor([[1]], dtype=torch.long, device=model_device)
+        )
+        example_cache_position = (
+            cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=model_device)
+        )
 
         exported_program = torch.export.export(
             self.model,
@@ -344,7 +349,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         Returns:
             torch.Tensor: A tensor containing the generated sequence of token IDs, including the original prompt tokens.
         """
-        latency_list=[]
+        latency_list = []
         device = prompt_token_ids.device
         prompt_token_len = prompt_token_ids.shape[-1]
         max_generation_length = prompt_token_len + max_new_tokens
@@ -362,7 +367,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
                 cache_position=torch.tensor([input_pos], dtype=torch.long, device=device),
             )
             response_tokens.append(prompt_token_ids[0][input_pos].item())
-            
+
         current_token = torch.argmax(result[:, -1, :], dim=-1).item()
         response_tokens.append(current_token)
         if token_latency:
@@ -386,6 +391,8 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             return (output, latency_list)
         else:
             return output
+
+
 class TorchExportableModuleWithHybridCache(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
@@ -665,17 +672,25 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
     def export(self, encoder_input_ids=None, decoder_input_ids=None, encoder_hidden_states=None, cache_position=None):
         device = self.full_model.device
         example_encoder_input_ids = (
-            encoder_input_ids if encoder_input_ids is not None else torch.ones((1, 10), dtype=torch.long, device=device)
+            encoder_input_ids
+            if encoder_input_ids is not None
+            else torch.ones((1, 10), dtype=torch.long, device=device)
         )
         example_decoder_input_ids = (
-            decoder_input_ids if decoder_input_ids is not None else torch.tensor([[0]], dtype=torch.long, device=device)
+            decoder_input_ids
+            if decoder_input_ids is not None
+            else torch.tensor([[0]], dtype=torch.long, device=device)
         )  # Start token
-        example_cache_position = cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=device)
+        example_cache_position = (
+            cache_position if cache_position is not None else torch.tensor([0], dtype=torch.long, device=device)
+        )
         example_encoder_hidden_states = (
             encoder_hidden_states
             if encoder_hidden_states is not None
             else torch.zeros(
-                (self.generation_config.cache_config.batch_size, 10, self.config.d_model), dtype=torch.float32, device=device
+                (self.generation_config.cache_config.batch_size, 10, self.config.d_model),
+                dtype=torch.float32,
+                device=device,
             )
         )
         self.exported_encoder = self._export_encoder(example_encoder_input_ids)
