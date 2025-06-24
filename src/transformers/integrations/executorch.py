@@ -25,7 +25,7 @@ from ..masking_utils import (
 )
 from ..modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ..pytorch_utils import is_torch_greater_or_equal, is_torch_greater_or_equal_than_2_3
-
+import time
 
 class TorchExportableModuleForDecoderOnlyLM(torch.nn.Module):
     """
@@ -325,6 +325,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         exported_program: torch.export.ExportedProgram,
         prompt_token_ids: torch.Tensor,
         max_new_tokens: int,
+        token_latency: Optional[bool] = True,
     ) -> torch.Tensor:
         """
         Generate a sequence of tokens using an exported program.
@@ -343,6 +344,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         Returns:
             torch.Tensor: A tensor containing the generated sequence of token IDs, including the original prompt tokens.
         """
+        latency_list=[]
         device = prompt_token_ids.device
         prompt_token_len = prompt_token_ids.shape[-1]
         max_generation_length = prompt_token_len + max_new_tokens
@@ -353,16 +355,21 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
                 break
 
         response_tokens = []
+        tic = time.time()
         for input_pos in range(min(max_generation_length, prompt_token_len)):
             result = exported_program.module().forward(
                 input_ids=prompt_token_ids[:, input_pos : input_pos + 1],
                 cache_position=torch.tensor([input_pos], dtype=torch.long, device=device),
             )
             response_tokens.append(prompt_token_ids[0][input_pos].item())
-
+            
         current_token = torch.argmax(result[:, -1, :], dim=-1).item()
         response_tokens.append(current_token)
+        if token_latency:
+            torch.xpu.synchronize()
+        latency_list.append(time.time() - tic)
 
+        tic = time.time()
         while len(response_tokens) < max_generation_length:
             result = exported_program.module().forward(
                 input_ids=torch.tensor([[current_token]], dtype=torch.long, device=device),
@@ -370,10 +377,15 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             )
             current_token = torch.argmax(result[:, -1, :], dim=-1).item()
             response_tokens.append(current_token)
+        if token_latency:
+            torch.xpu.synchronize()
+        latency_list.append(time.time() - tic)
+        output = torch.tensor([response_tokens], dtype=torch.long, device=device)
 
-        return torch.tensor([response_tokens], dtype=torch.long, device=device)
-
-
+        if token_latency is not None:
+            return (output, latency_list)
+        else:
+            return output
 class TorchExportableModuleWithHybridCache(torch.nn.Module):
     """
     A recipe module designed to make a `PreTrainedModel` exportable with `torch.export`,
